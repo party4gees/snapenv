@@ -1,0 +1,9 @@
+node_modules/
+
+.env.local
+npm-debug.log*
+.cache/
+dist/
+.env
+.next/
+coverage/
