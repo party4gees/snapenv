@@ -1,0 +1,26 @@
+{
+  "name": "snapenv",
+  "version": "0.1.0",
+  "description": "Snapshot and restore local environment variables across projects",
+  "main": "src/index.js",
+  "bin": {
+    "snapenv": "./bin/snapenv.js"
+  },
+  "scripts": {
+    "test": "jest --coverage",
+    "lint": "eslint src/"
+  },
+  "keywords": ["env", "dotenv", "snapshot", "cli", "environment"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/*.test.js"]
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
