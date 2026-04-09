@@ -1,37 +1,38 @@
-const { copySnapshot, formatCopySummary } = require('../copy');
+import { copySnapshot, formatCopySummary } from '../copy.js';
 
-function printCopyUsage() {
+export function printCopyUsage() {
   console.log(`
-snapenv copy <source> <dest>
+Usage: snapenv copy <source> <destination> [options]
 
 Copy an existing snapshot to a new name.
 
 Arguments:
-  source    Name of the snapshot to copy from
-  dest      Name of the new snapshot
+  source       Name of the snapshot to copy from
+  destination  Name of the new snapshot
+
+Options:
+  --force      Overwrite destination if it already exists
+  --help       Show this help message
 
 Examples:
-  snapenv copy dev dev-backup
-  snapenv copy staging staging-2024
-`.trim());
+  snapenv copy production staging
+  snapenv copy main backup-before-deploy --force
+`);
 }
 
-async function runCopy(args) {
-  if (!args || args.length < 2 || args.includes('--help') || args.includes('-h')) {
+export async function runCopy(args) {
+  if (!args || args.length < 2 || args.includes('--help')) {
     printCopyUsage();
     return;
   }
 
-  const [source, dest] = args;
-  const projectDir = process.cwd();
+  const [source, destination, ...flags] = args;
+  const force = flags.includes('--force');
 
   try {
-    const result = await copySnapshot(source, dest, projectDir);
+    const result = await copySnapshot(source, destination, { force });
     console.log(formatCopySummary(result));
   } catch (err) {
     console.error(`Error: ${err.message}`);
-    process.exit(1);
   }
 }
-
-module.exports = { printCopyUsage, runCopy };
