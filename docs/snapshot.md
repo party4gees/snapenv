@@ -27,8 +27,9 @@ snapenv snapshot save staging --env .env.staging
 **Options:**
 
 | Flag | Description | Default |
-|------|-------------|---------|
+|------|-------------|----------|
 | `--env <file>` | Path to the env file to snapshot | `.env` |
+| `--overwrite` | Overwrite an existing snapshot with the same name | `false` |
 
 ---
 
@@ -70,6 +71,9 @@ snapenv snapshot save dev
 # Save a staging config from a separate file
 snapenv snapshot save staging --env .env.staging
 
+# Overwrite an existing snapshot
+snapenv snapshot save dev --overwrite
+
 # See what snapshots you have
 snapenv snapshot list
 
@@ -81,4 +85,5 @@ snapenv snapshot delete old-feature-branch
 
 - Snapshots are stored in the `.snapenv/` directory at your project root.
 - Snapshot files are JSON and can be inspected or committed to version control.
+- Saving a snapshot with a name that already exists will fail unless `--overwrite` is passed.
 - Use `snapenv restore <name>` to apply a snapshot back to your `.env` file.
