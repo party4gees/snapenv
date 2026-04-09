@@ -73,6 +73,10 @@ describe('export', () => {
       fs.existsSync.mockReturnValue(false);
       expect(() => exportSnapshot('missing')).toThrow("Snapshot 'missing' not found");
     });
+
+    it('should throw error for unsupported format', () => {
+      expect(() => exportSnapshot('test-snapshot', 'xml')).toThrow("Unsupported format 'xml'");
+    });
   });
 
   describe('exportToFile', () => {
@@ -83,21 +87,13 @@ describe('export', () => {
       expect(result.format).toBe('env');
       expect(result.output).toBe('/tmp/output.env');
     });
+
+    it('should throw error if write fails', () => {
+      fs.writeFileSync.mockImplementation(() => { throw new Error('Permission denied'); });
+      expect(() => exportToFile('test-snapshot', '/tmp/output.env', 'env')).toThrow('Permission denied');
+    });
   });
 
   describe('formatExportSummary', () => {
     it('should format export summary', () => {
-      const summary = {
-        snapshot: 'test-snapshot',
-        format: 'json',
-        output: '/tmp/output.json',
-        size: 256
-      };
-      const result = formatExportSummary(summary);
-      expect(result).toContain('test-snapshot');
-      expect(result).toContain('JSON');
-      expect(result).toContain('/tmp/output.json');
-      expect(result).toContain('256 bytes');
-    });
-  });
-});
+    
