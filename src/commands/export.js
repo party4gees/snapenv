@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { exportToFile, formatExportSummary } = require('../export');
 
+const VALID_FORMATS = ['env', 'json', 'shell'];
+
 function printExportUsage() {
   console.log(`
 Usage: snapenv export <snapshot-name> [options]
@@ -44,6 +46,11 @@ function runExport(args) {
     } else if (args[i] === '-o' || args[i] === '--output') {
       outputFile = args[++i];
     }
+  }
+
+  if (!VALID_FORMATS.includes(format)) {
+    console.error(`Error: Invalid format "${format}". Valid formats are: ${VALID_FORMATS.join(', ')}`);
+    process.exit(1);
   }
 
   try {
