@@ -1,51 +1,33 @@
-const { compareTwoSnapshots, formatCompareResult } = require('../compare');
+import { compareSnapshots, formatCompareResult, printCompareUsage } from '../compare.js';
 
-function printCompareUsage() {
-  console.log(`
-Usage: snapenv compare <snapshotA> <snapshotB> [options]
+export { printCompareUsage };
 
-Compare two snapshots side by side.
+/**
+ * runCompare(['snap-a', 'snap-b', ...flags])
+ * Compares two snapshots and prints a formatted diff.
+ */
+export async function runCompare(args = []) {
+  const flags = args.filter((a) => a.startsWith('--'));
+  const names = args.filter((a) => !a.startsWith('--'));
 
-Options:
-  --json       Output result as JSON
-  --help       Show this help message
-
-Examples:
-  snapenv compare dev prod
-  snapenv compare staging-2024-01 staging-2024-02 --json
-`);
-}
-
-async function runCompare(args) {
-  if (args.includes('--help') || args.includes('-h')) {
+  if (names.length < 2) {
     printCompareUsage();
     return;
   }
 
-  const positional = args.filter(a => !a.startsWith('--'));
-  const useJson = args.includes('--json');
-
-  if (positional.length < 2) {
-    console.error('Error: two snapshot names are required.');
-    printCompareUsage();
-    process.exit(1);
-  }
-
-  const [nameA, nameB] = positional;
+  const [nameA, nameB] = names;
+  const color = !flags.includes('--no-color');
 
   try {
-    const result = await compareTwoSnapshots(nameA, nameB);
+    const result = await compareSnapshots(nameA, nameB);
+    const output = formatCompareResult(result, { color });
+    console.log(output);
 
-    if (useJson) {
-      console.log(JSON.stringify({ snapshotA: nameA, snapshotB: nameB, ...result }, null, 2));
-      return;
+    if (result.identical) {
+      console.log(`Snapshots "${nameA}" and "${nameB}" are identical.`);
     }
-
-    console.log(formatCompareResult(nameA, nameB, result));
   } catch (err) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
+    console.error(`Error comparing snapshots: ${err.message}`);
+    process.exitCode = 1;
   }
 }
-
-module.exports = { printCompareUsage, runCompare };
