@@ -1,88 +1,64 @@
-const { inspectSnapshot, filterVars, formatInspect } = require('./inspect');
-const { loadSnapshot } = require('./snapshot');
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { inspectSnapshot, filterVars, formatInspect } from './inspect.js';
+import { loadSnapshot } from './snapshot.js';
 
-jest.mock('./snapshot');
-
-const mockSnapshot = {
-  createdAt: '2024-01-15T10:00:00.000Z',
-  vars: {
-    NODE_ENV: 'production',
-    API_KEY: 'abc123',
-    DB_PASSWORD: 'supersecret',
-    PORT: '3000',
-    APP_NAME: 'myapp',
-  },
-};
-
-beforeEach(() => {
-  loadSnapshot.mockReturnValue(mockSnapshot);
-});
+vi.mock('./snapshot.js');
 
 describe('inspectSnapshot', () => {
-  it('returns structured inspect result', () => {
-    const result = inspectSnapshot('prod', '/project');
-    expect(result.name).toBe('prod');
-    expect(result.keyCount).toBe(5);
-    expect(result.vars).toEqual(mockSnapshot.vars);
-    expect(result.createdAt).toBe(mockSnapshot.createdAt);
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('calls loadSnapshot with correct args', () => {
-    inspectSnapshot('staging', '/my/project');
-    expect(loadSnapshot).toHaveBeenCalledWith('staging', '/my/project');
+  it('returns parsed vars from a snapshot', async () => {
+    loadSnapshot.mockResolvedValue('FOO=bar\nBAZ=qux\n');
+    const result = await inspectSnapshot('mysnap', 'testproject');
+    expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
+  });
+
+  it('throws if snapshot not found', async () => {
+    loadSnapshot.mockRejectedValue(new Error('not found'));
+    await expect(inspectSnapshot('missing', 'testproject')).rejects.toThrow('not found');
   });
 });
 
 describe('filterVars', () => {
-  const vars = { NODE_ENV: 'production', API_KEY: 'abc123', PORT: '3000' };
+  const vars = { FOO: 'bar', DB_HOST: 'localhost', DB_PASS: 'secret', NODE_ENV: 'dev' };
 
-  it('returns all vars when no search term', () => {
+  it('returns all vars when no filter given', () => {
     expect(filterVars(vars, null)).toEqual(vars);
   });
 
-  it('filters by key substring', () => {
-    const result = filterVars(vars, 'api');
-    expect(Object.keys(result)).toEqual(['API_KEY']);
-  });
-
-  it('filters by value substring', () => {
-    const result = filterVars(vars, 'production');
-    expect(Object.keys(result)).toEqual(['NODE_ENV']);
+  it('filters by prefix', () => {
+    expect(filterVars(vars, 'DB_')).toEqual({ DB_HOST: 'localhost', DB_PASS: 'secret' });
   });
 
   it('returns empty object when no match', () => {
-    expect(filterVars(vars, 'zzznomatch')).toEqual({});
+    expect(filterVars(vars, 'AWS_')).toEqual({});
+  });
+
+  it('is case-sensitive', () => {
+    expect(filterVars(vars, 'foo')).toEqual({});
   });
 });
 
 describe('formatInspect', () => {
-  const inspectResult = {
-    name: 'prod',
-    createdAt: '2024-01-15T10:00:00.000Z',
-    keyCount: 5,
-    vars: mockSnapshot.vars,
-  };
-
-  it('includes snapshot name and key count', () => {
-    const output = formatInspect(inspectResult);
-    expect(output).toContain('Snapshot: prod');
-    expect(output).toContain('Keys:     5');
+  it('formats vars as key=value lines', () => {
+    const vars = { FOO: 'bar', BAZ: 'qux' };
+    const output = formatInspect('mysnap', vars);
+    expect(output).toContain('mysnap');
+    expect(output).toContain('FOO=bar');
+    expect(output).toContain('BAZ=qux');
   });
 
-  it('masks password fields', () => {
-    const output = formatInspect(inspectResult);
-    expect(output).toContain('DB_PASSWORD');
-    expect(output).toContain('********');
-    expect(output).not.toContain('supersecret');
+  it('shows count of variables', () => {
+    const vars = { A: '1', B: '2', C: '3' };
+    const output = formatInspect('snap1', vars);
+    expect(output).toContain('3');
   });
 
-  it('shows search match count when search provided', () => {
-    const output = formatInspect(inspectResult, 'api');
-    expect(output).toContain('matching "api"');
-  });
-
-  it('shows no matching keys message when filter yields nothing', () => {
-    const output = formatInspect(inspectResult, 'zzznomatch');
-    expect(output).toContain('(no matching keys)');
+  it('handles empty vars gracefully', () => {
+    const output = formatInspect('empty', {});
+    expect(output).toContain('empty');
+    expect(output).toContain('0');
   });
 });
