@@ -2,6 +2,9 @@ const { loadSnapshot } = require('./snapshot');
 
 /**
  * Compare two snapshots and return added, removed, changed keys
+ * @param {Object} snapshotA - The base snapshot
+ * @param {Object} snapshotB - The snapshot to compare against
+ * @returns {{ added: Object, removed: Object, changed: Object, unchanged: Object }}
  */
 function compareSnapshots(snapshotA, snapshotB) {
   const keysA = new Set(Object.keys(snapshotA));
@@ -31,6 +34,19 @@ function compareSnapshots(snapshotA, snapshotB) {
   return { added, removed, changed, unchanged };
 }
 
+/**
+ * Returns true if there are no differences between the two snapshots
+ * @param {{ added: Object, removed: Object, changed: Object }} result
+ * @returns {boolean}
+ */
+function isIdentical(result) {
+  return (
+    Object.keys(result.added).length === 0 &&
+    Object.keys(result.removed).length === 0 &&
+    Object.keys(result.changed).length === 0
+  );
+}
+
 function formatCompareResult(nameA, nameB, result) {
   const lines = [];
   lines.push(`Comparing "${nameA}" → "${nameB}":`);
@@ -41,7 +57,7 @@ function formatCompareResult(nameA, nameB, result) {
   const changedKeys = Object.keys(result.changed);
   const unchangedCount = Object.keys(result.unchanged).length;
 
-  if (addedKeys.length === 0 && removedKeys.length === 0 && changedKeys.length === 0) {
+  if (isIdentical(result)) {
     lines.push('  No differences found.');
     lines.push(`  ${unchangedCount} key(s) identical.`);
     return lines.join('\n');
@@ -71,4 +87,4 @@ async function compareTwoSnapshots(nameA, nameB) {
   return compareSnapshots(snapshotA, snapshotB);
 }
 
-module.exports = { compareSnapshots, compareTwoSnapshots, formatCompareResult };
+module.exports = { compareSnapshots, compareTwoSnapshots, formatCompareResult, isIdentical };
