@@ -47,6 +47,13 @@ describe('lock', () => {
     expect(() => lockSnapshot(tmpDir, 'prod')).toThrow('already locked');
   });
 
+  test('lockSnapshot stores a valid ISO timestamp', () => {
+    makeSnapshot(tmpDir, 'prod');
+    const info = lockSnapshot(tmpDir, 'prod', 'checking timestamp');
+    expect(() => new Date(info.lockedAt)).not.toThrow();
+    expect(new Date(info.lockedAt).toISOString()).toBe(info.lockedAt);
+  });
+
   test('isLocked returns true after locking', () => {
     makeSnapshot(tmpDir, 'staging');
     lockSnapshot(tmpDir, 'staging');
@@ -74,6 +81,15 @@ describe('lock', () => {
     expect(getLockInfo(tmpDir, 'nope')).toBeNull();
   });
 
+  test('getLockInfo returns lock details after locking', () => {
+    makeSnapshot(tmpDir, 'prod');
+    lockSnapshot(tmpDir, 'prod', 'freeze');
+    const info = getLockInfo(tmpDir, 'prod');
+    expect(info).not.toBeNull();
+    expect(info.reason).toBe('freeze');
+    expect(info.lockedAt).toBeDefined();
+  });
+
   test('formatLockStatus shows locked info', () => {
     makeSnapshot(tmpDir, 'prod');
     lockSnapshot(tmpDir, 'prod', 'release freeze');
@@ -85,5 +101,17 @@ describe('lock', () => {
 
   test('formatLockStatus shows unlocked', () => {
     expect(formatLockStatus('dev', null)).toBe('dev: unlocked');
+  });
+
+  test('loadLocks returns all locked snapshots', () => {
+    makeSnapshot(tmpDir, 'prod');
+    makeSnapshot(tmpDir, 'staging');
+    makeSnapshot(tmpDir, 'dev');
+    lockSnapshot(tmpDir, 'prod', 'release freeze');
+    lockSnapshot(tmpDir, 'staging', 'qa hold');
+    const locks = loadLocks(tmpDir);
+    expect(locks['prod']).toBeDefined();
+    expect(locks['staging']).toBeDefined();
+    expect(locks['dev']).toBeUndefined();
   });
 });
