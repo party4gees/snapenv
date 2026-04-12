@@ -16,6 +16,13 @@ describe('runCompare', () => {
     consoleSpy.mockRestore();
   });
 
+  it('prints usage if no arguments provided', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await runCompare([]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Usage'));
+    consoleSpy.mockRestore();
+  });
+
   it('calls compareSnapshots with both names', async () => {
     compareSnapshots.mockResolvedValue({ added: {}, removed: {}, changed: {}, identical: true });
     formatCompareResult.mockReturnValue('identical output');
@@ -58,6 +65,20 @@ describe('runCompare', () => {
     expect(formatCompareResult).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ color: false })
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it('uses color by default when --no-color is not passed', async () => {
+    compareSnapshots.mockResolvedValue({ added: {}, removed: {}, changed: {}, identical: false });
+    formatCompareResult.mockReturnValue('colored output');
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await runCompare(['snap-a', 'snap-b']);
+
+    expect(formatCompareResult).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ color: true })
     );
     consoleSpy.mockRestore();
   });
