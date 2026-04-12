@@ -87,4 +87,17 @@ async function compareTwoSnapshots(nameA, nameB) {
   return compareSnapshots(snapshotA, snapshotB);
 }
 
-module.exports = { compareSnapshots, compareTwoSnapshots, formatCompareResult, isIdentical };
+/**
+ * Returns a summary count of differences in a compare result
+ * @param {{ added: Object, removed: Object, changed: Object, unchanged: Object }} result
+ * @returns {{ added: number, removed: number, changed: number, unchanged: number, total: number }}
+ */
+function summarize(result) {
+  const added = Object.keys(result.added).length;
+  const removed = Object.keys(result.removed).length;
+  const changed = Object.keys(result.changed).length;
+  const unchanged = Object.keys(result.unchanged).length;
+  return { added, removed, changed, unchanged, total: added + removed + changed + unchanged };
+}
+
+module.exports = { compareSnapshots, compareTwoSnapshots, formatCompareResult, isIdentical, summarize };
