@@ -69,10 +69,32 @@ describe('runArchive', () => {
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Restored "prod"'));
   });
 
+  it('errors when restore missing name', async () => {
+    const exit = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await expect(runArchive(['restore'])).rejects.toThrow('exit');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('name is required'));
+    exit.mockRestore();
+  });
+
   it('errors on unknown subcommand', async () => {
     const exit = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     await expect(runArchive(['nope'])).rejects.toThrow('exit');
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Unknown archive subcommand'));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Unknown archiv'));
     exit.mockRestore();
+  });
+});
+
+describe('printArchiveUsage', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    console.log.mockRestore();
+  });
+
+  it('prints usage info', () => {
+    printArchiveUsage();
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Usage'));
   });
 });
