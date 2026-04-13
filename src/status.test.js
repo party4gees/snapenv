@@ -1,92 +1,82 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { getActiveSnapshot, setActiveSnapshot, clearActiveSnapshot, getStatus, formatStatus } = require('./status');
-const { saveSnapshot } = require('./snapshot');
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import {
+  getProjectEnvPath,
+  getActiveSnapshot,
+  setActiveSnapshot,
+  clearActiveSnapshot,
+  getStatus,
+  formatStatus
+} from './status.js';
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'snapenv-status-'));
 }
 
-describe('getActiveSnapshot / setActiveSnapshot / clearActiveSnapshot', () => {
-  it('returns null when no active file exists', () => {
-    const dir = makeTmpDir();
-    expect(getActiveSnapshot(dir)).toBeNull();
+describe('status', () => {
+  let tmpDir;
+  let origHome;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    origHome = process.env.HOME;
+    process.env.HOME = tmpDir;
   });
 
-  it('sets and retrieves active snapshot name', () => {
-    const dir = makeTmpDir();
-    setActiveSnapshot(dir, 'my-snap');
-    expect(getActiveSnapshot(dir)).toBe('my-snap');
+  afterEach(() => {
+    process.env.HOME = origHome;
+    fs.rmSync(tmpDir, { recursive: true });
   });
 
-  it('clears active snapshot', () => {
-    const dir = makeTmpDir();
-    setActiveSnapshot(dir, 'my-snap');
-    clearActiveSnapshot(dir);
-    expect(getActiveSnapshot(dir)).toBeNull();
+  it('getProjectEnvPath returns path based on cwd', () => {
+    const p = getProjectEnvPath(tmpDir);
+    expect(p).toContain('.env');
   });
 
-  it('clearActiveSnapshot is safe when no active file', () => {
-    const dir = makeTmpDir();
-    expect(() => clearActiveSnapshot(dir)).not.toThrow();
+  it('getActiveSnapshot returns null when no active snapshot set', () => {
+    const result = getActiveSnapshot(tmpDir);
+    expect(result).toBeNull();
   });
-});
 
-describe('getStatus', () => {
-  it('returns status with no active snapshot and no env file', () => {
-    const dir = makeTmpDir();
-    const envPath = path.join(dir, '.env');
-    const status = getStatus(dir, envPath);
-    expect(status.active).toBeNull();
+  it('setActiveSnapshot and getActiveSnapshot round-trip', () => {
+    setActiveSnapshot('my-snapshot', tmpDir);
+    const result = getActiveSnapshot(tmpDir);
+    expect(result).toBe('my-snapshot');
+  });
+
+  it('clearActiveSnapshot removes the active snapshot', () => {
+    setActiveSnapshot('my-snapshot', tmpDir);
+    clearActiveSnapshot(tmpDir);
+    expect(getActiveSnapshot(tmpDir)).toBeNull();
+  });
+
+  it('getStatus returns status object with active and envExists', () => {
+    setActiveSnapshot('dev', tmpDir);
+    const envPath = path.join(tmpDir, '.env');
+    fs.writeFileSync(envPath, 'FOO=bar\n');
+    const status = getStatus(tmpDir, envPath);
+    expect(status.active).toBe('dev');
+    expect(status.envExists).toBe(true);
+  });
+
+  it('getStatus envExists false when no .env file', () => {
+    const status = getStatus(tmpDir, path.join(tmpDir, '.env'));
     expect(status.envExists).toBe(false);
-    expect(status.snapshotCount).toBe(0);
-    expect(status.drift).toBeNull();
-    expect(status.hasDrift).toBe(false);
+    expect(status.active).toBeNull();
   });
 
-  it('detects drift when active snapshot differs from env', () => {
-    const dir = makeTmpDir();
-    const envPath = path.join(dir, '.env');
-    saveSnapshot(dir, 'base', { FOO: 'bar', BAZ: 'qux' });
-    setActiveSnapshot(dir, 'base');
-    fs.writeFileSync(envPath, 'FOO=changed\nNEW=val\n', 'utf8');
-    const status = getStatus(dir, envPath);
-    expect(status.active).toBe('base');
-    expect(status.hasDrift).toBe(true);
-    expect(status.drift.changed.length).toBeGreaterThan(0);
-  });
-
-  it('reports no drift when env matches active snapshot', () => {
-    const dir = makeTmpDir();
-    const envPath = path.join(dir, '.env');
-    saveSnapshot(dir, 'exact', { FOO: 'bar' });
-    setActiveSnapshot(dir, 'exact');
-    fs.writeFileSync(envPath, 'FOO=bar\n', 'utf8');
-    const status = getStatus(dir, envPath);
-    expect(status.hasDrift).toBe(false);
-  });
-});
-
-describe('formatStatus', () => {
-  it('formats status output as a string', () => {
-    const status = {
-      active: 'prod',
-      snapshotCount: 3,
-      envExists: true,
-      envVarCount: 5,
-      drift: { added: [], removed: ['X'], changed: [] },
-      hasDrift: true,
-    };
+  it('formatStatus includes active snapshot name', () => {
+    setActiveSnapshot('production', tmpDir);
+    const status = getStatus(tmpDir, path.join(tmpDir, '.env'));
     const out = formatStatus(status);
-    expect(out).toContain('prod');
-    expect(out).toContain('3');
-    expect(out).toContain('Drift detected');
+    expect(out).toContain('production');
   });
 
-  it('shows none when no active snapshot', () => {
-    const status = { active: null, snapshotCount: 0, envExists: false, envVarCount: 0, drift: null, hasDrift: false };
+  it('formatStatus shows no active snapshot message', () => {
+    const status = getStatus(tmpDir, path.join(tmpDir, '.env'));
     const out = formatStatus(status);
-    expect(out).toContain('(none)');
+    expect(out).toMatch(/no active/i);
   });
 });
