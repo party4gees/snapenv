@@ -1,65 +1,50 @@
-const { batchDelete, batchRestore, formatBatchResult } = require('../batch');
-const { ensureSnapenvDir } = require('../snapshot');
-const path = require('path');
+import { printBatchUsage, formatBatchResult } from '../batch.js';
+import { saveSnapshot, loadSnapshot } from '../snapshot.js';
+import { restoreSnapshot } from '../restore.js';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
-function printBatchUsage() {
-  console.log(`
-snapenv batch <operation> <name1> [name2 ...]
-
-Operations:
-  delete   Delete multiple snapshots
-  restore  Restore multiple snapshots in sequence
-
-Options:
-  --env <path>   Path to .env file (default: .env)
-  --dir <path>   Snapenv directory (default: .snapenv)
-  --help         Show this help message
-
-Examples:
-  snapenv batch delete old-snap backup-snap
-  snapenv batch restore staging-base staging-overrides
-  `);
-}
-
-async function runBatch(args) {
-  if (!args.length || args[0] === '--help') {
+export async function runBatch(args) {
+  if (!args || args.length === 0) {
     printBatchUsage();
     return;
   }
 
-  const operation = args[0];
-  const rest = args.slice(1);
+  const [subcommand, ...names] = args;
 
-  const envIndex = rest.indexOf('--env');
-  const envPath = envIndex !== -1 ? rest[envIndex + 1] : path.resolve('.env');
-
-  const dirIndex = rest.indexOf('--dir');
-  const snapenvDir = dirIndex !== -1 ? rest[dirIndex + 1] : path.resolve('.snapenv');
-
-  const names = rest.filter((a) => !a.startsWith('--') && a !== envPath && a !== snapenvDir);
-
-  if (!names.length) {
-    console.error('Error: at least one snapshot name is required');
-    process.exit(1);
+  if (!['save', 'restore', 'delete'].includes(subcommand)) {
+    console.log(`Unknown batch subcommand: "${subcommand}". Use save, restore, or delete.`);
+    return;
   }
 
-  await ensureSnapenvDir(snapenvDir);
-
-  let results;
-  if (operation === 'delete') {
-    results = await batchDelete(names, snapenvDir);
-    console.log(formatBatchResult(results, 'deleted'));
-  } else if (operation === 'restore') {
-    results = await batchRestore(names, envPath, snapenvDir);
-    console.log(formatBatchResult(results, 'restored'));
-  } else {
-    console.error(`Unknown batch operation: ${operation}`);
-    printBatchUsage();
-    process.exit(1);
+  if (names.length === 0) {
+    console.log(`No snapshot names provided for batch ${subcommand}.`);
+    return;
   }
 
-  const anyFailed = results.some((r) => !r.success);
-  if (anyFailed) process.exit(1);
+  const results = [];
+
+  for (const name of names) {
+    try {
+      if (subcommand === 'save') {
+        const envPath = resolve(process.cwd(), '.env');
+        let content = '';
+        try { content = readFileSync(envPath, 'utf8'); } catch {}
+        await saveSnapshot(name, content);
+        results.push({ name, status: 'saved' });
+      } else if (subcommand === 'restore') {
+        const summary = await restoreSnapshot(name);
+        results.push({ name, status: 'restored', summary });
+      } else if (subcommand === 'delete') {
+        const { deleteSnapshot } = await import('../prune.js');
+        await deleteSnapshot(name);
+        results.push({ name, status: 'deleted' });
+      }
+    } catch (err) {
+      console.error(`[batch] Failed for ${name}:`, err.message);
+      results.push({ name, status: 'error', error: err.message });
+    }
+  }
+
+  console.log(formatBatchResult(results));
 }
-
-module.exports = { printBatchUsage, runBatch };
