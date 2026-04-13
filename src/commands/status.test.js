@@ -1,74 +1,78 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { runStatus, printStatusUsage } from './status.js';
-import * as statusModule from '../status.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { runStatus } from './status.js';
+import * as status from '../status.js';
 
-function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'snapenv-cmd-status-'));
-}
+vi.mock('../status.js');
 
-describe('commands/status', () => {
-  let tmpDir;
-  let origHome;
-  let consoleSpy;
+const mockStatus = {
+  active: 'my-snapshot',
+  envFile: '.env',
+  projectDir: '/home/user/project',
+  snapshotCount: 5,
+  lastSaved: '2024-01-15T10:30:00.000Z',
+};
 
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-    origHome = process.env.HOME;
-    process.env.HOME = tmpDir;
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(process, 'exit').mockImplementation(() => {});
+});
+
+describe('runStatus', () => {
+  it('prints status when active snapshot exists', async () => {
+    status.getStatus.mockResolvedValue(mockStatus);
+    status.formatStatus.mockReturnValue('Status: my-snapshot active');
+
+    await runStatus({});
+
+    expect(status.getStatus).toHaveBeenCalled();
+    expect(status.formatStatus).toHaveBeenCalledWith(mockStatus);
+    expect(console.log).toHaveBeenCalledWith('Status: my-snapshot active');
   });
 
-  afterEach(() => {
-    process.env.HOME = origHome;
-    fs.rmSync(tmpDir, { recursive: true });
-    vi.restoreAllMocks();
+  it('prints status when no active snapshot', async () => {
+    const noActiveStatus = { ...mockStatus, active: null };
+    status.getStatus.mockResolvedValue(noActiveStatus);
+    status.formatStatus.mockReturnValue('No active snapshot');
+
+    await runStatus({});
+
+    expect(console.log).toHaveBeenCalledWith('No active snapshot');
   });
 
-  it('prints usage with --help', async () => {
-    await runStatus(['--help']);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('snapenv status'));
+  it('handles --json flag', async () => {
+    status.getStatus.mockResolvedValue(mockStatus);
+
+    await runStatus({ json: true });
+
+    expect(console.log).toHaveBeenCalledWith(JSON.stringify(mockStatus, null, 2));
+    expect(status.formatStatus).not.toHaveBeenCalled();
   });
 
-  it('prints usage with -h', async () => {
-    await runStatus(['-h']);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('snapenv status'));
+  it('handles --quiet flag — prints only active name', async () => {
+    status.getStatus.mockResolvedValue(mockStatus);
+
+    await runStatus({ quiet: true });
+
+    expect(console.log).toHaveBeenCalledWith('my-snapshot');
+    expect(status.formatStatus).not.toHaveBeenCalled();
   });
 
-  it('printStatusUsage outputs usage info', () => {
-    printStatusUsage();
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Usage'));
+  it('prints nothing with --quiet when no active snapshot', async () => {
+    status.getStatus.mockResolvedValue({ ...mockStatus, active: null });
+
+    await runStatus({ quiet: true });
+
+    expect(console.log).not.toHaveBeenCalled();
   });
 
-  it('runStatus calls formatStatus and prints result', async () => {
-    const formatSpy = vi.spyOn(statusModule, 'formatStatus').mockReturnValue('Status: no active snapshot');
-    vi.spyOn(statusModule, 'getStatus').mockReturnValue({ active: null, envExists: false });
-    vi.spyOn(statusModule, 'getProjectEnvPath').mockReturnValue(path.join(tmpDir, '.env'));
+  it('exits with code 1 on error', async () => {
+    status.getStatus.mockRejectedValue(new Error('read error'));
 
-    await runStatus(['--dir', tmpDir]);
+    await runStatus({});
 
-    expect(formatSpy).toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith('Status: no active snapshot');
-  });
-
-  it('runStatus with active snapshot shows snapshot name', async () => {
-    vi.spyOn(statusModule, 'getProjectEnvPath').mockReturnValue(path.join(tmpDir, '.env'));
-    vi.spyOn(statusModule, 'getStatus').mockReturnValue({ active: 'staging', envExists: true });
-    vi.spyOn(statusModule, 'formatStatus').mockReturnValue('Active snapshot: staging');
-
-    await runStatus(['--dir', tmpDir]);
-
-    expect(consoleSpy).toHaveBeenCalledWith('Active snapshot: staging');
-  });
-
-  it('exits with error if --dir flag has no value', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(runStatus(['--dir'])).rejects.toThrow('exit');
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('--dir'));
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('read error'));
+    expect(process.exit).toHaveBeenCalledWith(1);
   });
 });
