@@ -53,11 +53,28 @@ function parseImportFormat(content, format) {
  * Parse JSON format
  * @param {string} content - JSON content
  * @returns {Object} Environment variables
+ * @throws {Error} If content is not valid JSON or does not contain an object
  */
 function parseJsonFormat(content) {
-  const parsed = JSON.parse(content);
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (e) {
+    throw new Error(`Failed to parse JSON: ${e.message}`);
+  }
+
+  if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+    throw new Error('JSON import must be an object');
+  }
+
   // Handle both {"KEY": "value"} and {"env": {"KEY": "value"}}
-  return parsed.env || parsed;
+  const vars = parsed.env || parsed;
+
+  if (typeof vars !== 'object' || Array.isArray(vars) || vars === null) {
+    throw new Error('JSON import must contain an object of key-value pairs');
+  }
+
+  return vars;
 }
 
 /**
