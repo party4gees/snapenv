@@ -70,4 +70,20 @@ function formatStatus(status) {
   return lines.join('\n');
 }
 
-module.exports = { getActiveSnapshot, setActiveSnapshot, clearActiveSnapshot, getStatus, formatStatus, getProjectEnvPath };
+/**
+ * Returns a short one-line summary of the current status, useful for
+ * prompts or compact displays (e.g. shell integrations).
+ *
+ * Examples:
+ *   "no snapshot active"
+ *   "snapshot: production (clean)"
+ *   "snapshot: production (drift: +1 -0 ~2)"
+ */
+function getStatusSummary(status) {
+  if (!status.active) return 'no snapshot active';
+  if (!status.hasDrift) return `snapshot: ${status.active} (clean)`;
+  const { added, removed, changed } = status.drift;
+  return `snapshot: ${status.active} (drift: +${added.length} -${removed.length} ~${changed.length})`;
+}
+
+module.exports = { getActiveSnapshot, setActiveSnapshot, clearActiveSnapshot, getStatus, formatStatus, getStatusSummary, getProjectEnvPath };
