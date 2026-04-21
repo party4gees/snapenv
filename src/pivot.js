@@ -1,28 +1,12 @@
 const { loadSnapshot } = require('./snapshot');
-const { listSnapshotsWithMeta } = require('./list');
 
 /**
- * Build a pivot table: rows = snapshot names, cols = env var keys, values = var values
- */
-function buildPivotTable(snapshots, vars) {
-  const rows = [];
-  for (const snap of snapshots) {
-    const row = { name: snap.name };
-    for (const key of vars) {
-      row[key] = snap.vars[key] !== undefined ? snap.vars[key] : '';
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-
-/**
- * Collect all unique keys across a set of loaded snapshots
+ * Collect all unique keys across multiple snapshots.
  */
 function collectKeys(snapshots) {
   const keys = new Set();
   for (const snap of snapshots) {
-    for (const key of Object.keys(snap.vars)) {
+    for (const key of Object.keys(snap.vars || {})) {
       keys.add(key);
     }
   }
@@ -30,38 +14,54 @@ function collectKeys(snapshots) {
 }
 
 /**
- * Load multiple snapshots and attach their vars
+ * Build a pivot table: rows = keys, columns = snapshot names.
+ * @param {Array<{name: string, vars: object}>} snapshots
+ * @returns {{ keys: string[], columns: string[], rows: object[] }}
  */
-async function loadSnapshotsForPivot(snapDir, names) {
-  const results = [];
-  for (const name of names) {
-    const vars = await loadSnapshot(snapDir, name);
-    results.push({ name, vars: vars || {} });
-  }
-  return results;
+function buildPivotTable(snapshots) {
+  const keys = collectKeys(snapshots);
+  const columns = snapshots.map((s) => s.name);
+
+  const rows = keys.map((key) => {
+    const row = { key };
+    for (const snap of snapshots) {
+      row[snap.name] = (snap.vars || {})[key] !== undefined ? (snap.vars || {})[key] : null;
+    }
+    return row;
+  });
+
+  return { keys, columns, rows };
 }
 
 /**
- * Format pivot table as a plain-text grid
+ * Format a pivot table for terminal output.
  */
-function formatPivotTable(rows, keys) {
-  if (rows.length === 0 || keys.length === 0) return 'No data to display.';
+function formatPivotTable({ keys, columns, rows }) {
+  if (!keys.length) return 'No variables found.';
 
-  const colWidth = (arr) => Math.max(...arr.map((s) => String(s).length));
-  const nameWidth = colWidth([...rows.map((r) => r.name), 'SNAPSHOT']);
-  const keyWidths = keys.map((k) =>
-    colWidth([k, ...rows.map((r) => r[k])])
-  );
+  const colWidth = 20;
+  const keyWidth = Math.max(12, ...keys.map((k) => k.length)) + 2;
 
-  const pad = (s, w) => String(s).padEnd(w);
-  const header = [pad('SNAPSHOT', nameWidth), ...keys.map((k, i) => pad(k, keyWidths[i]))].join('  ');
-  const divider = '-'.repeat(header.length);
+  const header =
+    'KEY'.padEnd(keyWidth) +
+    columns.map((c) => c.slice(0, colWidth - 2).padEnd(colWidth)).join('');
 
-  const dataRows = rows.map((row) =>
-    [pad(row.name, nameWidth), ...keys.map((k, i) => pad(row[k], keyWidths[i]))].join('  ')
-  );
+  const divider = '-'.repeat(keyWidth + columns.length * colWidth);
 
-  return [header, divider, ...dataRows].join('\n');
+  const body = rows
+    .map((row) => {
+      const keyCell = row.key.padEnd(keyWidth);
+      const valueCells = columns
+        .map((c) => {
+          const val = row[c] === null ? '—' : String(row[c]).slice(0, colWidth - 2);
+          return val.padEnd(colWidth);
+        })
+        .join('');
+      return keyCell + valueCells;
+    })
+    .join('\n');
+
+  return [header, divider, body].join('\n');
 }
 
-module.exports = { buildPivotTable, collectKeys, loadSnapshotsForPivot, formatPivotTable };
+module.exports = { buildPivotTable, collectKeys, formatPivotTable };
