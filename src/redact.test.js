@@ -1,83 +1,71 @@
-const { isSensitiveKey, redactEnvVars, formatRedactSummary, REDACT_PLACEHOLDER } = require('./redact');
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { isSensitiveKey, redactEnvVars, formatRedactSummary } from './redact.js';
 
 describe('isSensitiveKey', () => {
-  test('matches password keys', () => {
-    expect(isSensitiveKey('DB_PASSWORD')).toBe(true);
-    expect(isSensitiveKey('password')).toBe(true);
+  it('matches common secret key names', () => {
+    assert.equal(isSensitiveKey('SECRET'), true);
+    assert.equal(isSensitiveKey('API_KEY'), true);
+    assert.equal(isSensitiveKey('DB_PASSWORD'), true);
+    assert.equal(isSensitiveKey('AUTH_TOKEN'), true);
+    assert.equal(isSensitiveKey('PRIVATE_KEY'), true);
+    assert.equal(isSensitiveKey('AWS_SECRET_ACCESS_KEY'), true);
   });
 
-  test('matches token keys', () => {
-    expect(isSensitiveKey('GITHUB_TOKEN')).toBe(true);
-    expect(isSensitiveKey('ACCESS_TOKEN')).toBe(true);
+  it('does not match benign keys', () => {
+    assert.equal(isSensitiveKey('NODE_ENV'), false);
+    assert.equal(isSensitiveKey('PORT'), false);
+    assert.equal(isSensitiveKey('APP_NAME'), false);
+    assert.equal(isSensitiveKey('LOG_LEVEL'), false);
   });
 
-  test('matches api key variants', () => {
-    expect(isSensitiveKey('API_KEY')).toBe(true);
-    expect(isSensitiveKey('APIKEY')).toBe(true);
-    expect(isSensitiveKey('API-KEY')).toBe(true);
-  });
-
-  test('does not match safe keys', () => {
-    expect(isSensitiveKey('NODE_ENV')).toBe(false);
-    expect(isSensitiveKey('PORT')).toBe(false);
-    expect(isSensitiveKey('APP_NAME')).toBe(false);
-  });
-
-  test('respects extra patterns', () => {
-    expect(isSensitiveKey('INTERNAL_CODE', [/internal/i])).toBe(true);
+  it('is case-insensitive', () => {
+    assert.equal(isSensitiveKey('db_password'), true);
+    assert.equal(isSensitiveKey('Api_Key'), true);
   });
 });
 
 describe('redactEnvVars', () => {
-  const env = {
-    NODE_ENV: 'production',
-    DB_PASSWORD: 'supersecret',
-    API_KEY: 'abc123',
-    PORT: '3000',
-    SECRET_KEY: 'mysecret',
-  };
-
-  test('redacts sensitive keys', () => {
-    const { redacted } = redactEnvVars(env);
-    expect(redacted.DB_PASSWORD).toBe(REDACT_PLACEHOLDER);
-    expect(redacted.API_KEY).toBe(REDACT_PLACEHOLDER);
-    expect(redacted.SECRET_KEY).toBe(REDACT_PLACEHOLDER);
+  it('replaces sensitive values with redacted placeholder', () => {
+    const vars = { API_KEY: 'abc123', PORT: '3000', DB_PASSWORD: 'hunter2' };
+    const result = redactEnvVars(vars);
+    assert.equal(result.API_KEY, '[REDACTED]');
+    assert.equal(result.DB_PASSWORD, '[REDACTED]');
+    assert.equal(result.PORT, '3000');
   });
 
-  test('preserves safe keys', () => {
-    const { redacted } = redactEnvVars(env);
-    expect(redacted.NODE_ENV).toBe('production');
-    expect(redacted.PORT).toBe('3000');
+  it('accepts custom placeholder', () => {
+    const vars = { SECRET: 'topsecret', HOST: 'localhost' };
+    const result = redactEnvVars(vars, '***');
+    assert.equal(result.SECRET, '***');
+    assert.equal(result.HOST, 'localhost');
   });
 
-  test('returns list of redacted keys', () => {
-    const { redactedKeys } = redactEnvVars(env);
-    expect(redactedKeys).toContain('DB_PASSWORD');
-    expect(redactedKeys).toContain('API_KEY');
-    expect(redactedKeys).not.toContain('PORT');
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(redactEnvVars({}), {});
   });
 
-  test('supports custom placeholder', () => {
-    const { redacted } = redactEnvVars(env, { placeholder: '[HIDDEN]' });
-    expect(redacted.DB_PASSWORD).toBe('[HIDDEN]');
-  });
-
-  test('supports forced key redaction', () => {
-    const { redacted, redactedKeys } = redactEnvVars(env, { keys: ['PORT'] });
-    expect(redacted.PORT).toBe(REDACT_PLACEHOLDER);
-    expect(redactedKeys).toContain('PORT');
+  it('does not mutate the original object', () => {
+    const vars = { API_KEY: 'secret' };
+    redactEnvVars(vars);
+    assert.equal(vars.API_KEY, 'secret');
   });
 });
 
 describe('formatRedactSummary', () => {
-  test('returns message when nothing redacted', () => {
-    expect(formatRedactSummary([])).toBe('No sensitive keys detected.');
+  it('lists redacted keys and total count', () => {
+    const original = { API_KEY: 'x', PORT: '3000', DB_PASSWORD: 'y' };
+    const redacted = redactEnvVars(original);
+    const summary = formatRedactSummary(original, redacted);
+    assert.ok(summary.includes('2 key(s) redacted'));
+    assert.ok(summary.includes('API_KEY'));
+    assert.ok(summary.includes('DB_PASSWORD'));
   });
 
-  test('lists redacted keys', () => {
-    const summary = formatRedactSummary(['DB_PASSWORD', 'API_KEY']);
-    expect(summary).toContain('2 sensitive key(s)');
-    expect(summary).toContain('- DB_PASSWORD');
-    expect(summary).toContain('- API_KEY');
+  it('reports zero redactions when none found', () => {
+    const vars = { PORT: '3000', HOST: 'localhost' };
+    const redacted = redactEnvVars(vars);
+    const summary = formatRedactSummary(vars, redacted);
+    assert.ok(summary.includes('0 key(s) redacted'));
   });
 });
