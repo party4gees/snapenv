@@ -19,6 +19,16 @@ test('promotes a snapshot to a new name', () => {
   expect(loaded.API_URL).toBe('http://dev.example.com');
 });
 
+test('promotes all vars from source to dest', () => {
+  const dir = makeTmpDir();
+  const vars = { API_URL: 'http://dev.example.com', PORT: '3000', DEBUG: 'true' };
+  saveSnapshot('dev', vars, dir);
+  promoteSnapshot('dev', 'staging', dir);
+  const loaded = loadSnapshot('staging', dir);
+  expect(loaded.PORT).toBe('3000');
+  expect(loaded.DEBUG).toBe('true');
+});
+
 test('overwrote flag is true when dest already exists', () => {
   const dir = makeTmpDir();
   saveSnapshot('dev', { KEY: 'val1' }, dir);
